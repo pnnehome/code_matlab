@@ -3,17 +3,16 @@ function Y = search_model(par, curve, Xp, Xa, Xc, consumer_idx)
 
 numType = class(Xp);
 
-p = size(Xp,2);
-a = size(Xa,2);
-c = size(Xc,2);
+p = width(Xp);
+a = width(Xa);
+c = width(Xc);
 
 if numel(par) ~= p+a+c+2
-% if numel(par) ~= p+a+c+3
     error("incorrect number of parameters.")
 end
 
-n = size(Xc,1);  % number of consumers
-J = size(Xp,1)/n;         % number of search options
+n = height(Xc);     % number of consumers
+J = height(Xp)/n;   % number of search options
 
 par = par(:)';
 
@@ -36,7 +35,7 @@ r = v + interpolate(alpha0 + Xa*alpha', curve.log_cost, curve.utility);
 u = u(sort_idx);
 r = r(sort_idx);
 
-Y = nan(n*J, 3, numType);
+Y = nan(n*J, 2, numType);
 
 for i = 1:n
     
@@ -56,8 +55,8 @@ for i = 1:n
     
     Y(k,1) = searched;
     Y(k,2) = bought;
-    Y(k,3) = max(0, sum(searched)-(0:J-1));
-%     Y(k,3) = searched.*(1:J)' + (1-searched)*(J+1);
+    % Y(k,3) = max(0, sum(searched)-(0:J-1));
+    % Y(k,3) = searched.*(1:J)' + (1-searched)*(J+1);
     
 end
 
