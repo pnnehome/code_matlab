@@ -1,5 +1,5 @@
 
-function [coef, se, flag] = reg_logit(X, y, consumer_idx)
+function [coef, pass] = reg_logit(penalty, X, y, consumer_idx)
 
 %{
 
@@ -17,12 +17,14 @@ flag = 0 indicates that the regression has failed.
 %}
 
 m = 1e4;
-penalty = 1e-5;
-seed = RandStream('mcg16807', 'seed', 0);
+% penalty = 1e-5;
+% seed = RandStream('mcg16807', 'seed', 0);
 
 y = logical(y);
 X = [ones(size(y)), X];
 coef = zeros(1, width(X));
+
+opt = optimoptions('fminunc', 'disp','off', 'alg','trust-region', 'spec',true, 'hessianf','objective', 'subp','factorization');
 
 if isempty(consumer_idx)    % simple logit
 
@@ -35,13 +37,15 @@ if isempty(consumer_idx)    % simple logit
         m1 = min(n1, max(m - n0, m/2));
         m0 = m - m1;
 
-        i = [datasample(seed, find(y), m1, re=false); datasample(seed, find(~y), m0, re=false)];
+        i = [find(y, m1); find(~y, m0)];
 
-        coef = minimize(@(coef)loss_binary(X(i,:), y(i), penalty, coef), coef);
+        % i = [datasample(seed, find(y), m1, re=false); datasample(seed, find(~y), m0, re=false)];
+
+        coef = fminunc(@(coef)loss_binary(X(i,:), y(i), penalty, coef), coef, opt);
         coef(1) = coef(1) - log(n0/n1*m1/m0);
     end
 
-    [coef, hess, flag] = minimize(@(coef)loss_binary(X, y, penalty, coef), coef);
+    [coef,~,flag,~,~,hess] = fminunc(@(coef)loss_binary(X, y, penalty, coef), coef, opt);
 
 else  % multinomial logit
 
@@ -53,22 +57,24 @@ else  % multinomial logit
         m1 = max(1, floor(mean(t)*m));
         m0 = m - m1;
 
-        k = [datasample(seed, find(t), m1, re=false); datasample(seed, find(~t), m0, re=false)];
+        k = [find(t, m1); find(~t, m0)];
+
+        % k = [datasample(seed, find(t), m1, re=false); datasample(seed, find(~t), m0, re=false)];
         i = ismember(consumer_idx, k);
         
-        coef = minimize(@(coef)loss_multi(X(i,:), y(i), grp2idx(consumer_idx(i)), penalty, coef), coef);
+        coef = fminunc (@(coef)loss_multi(X(i,:), y(i), grp2idx(consumer_idx(i)), penalty, coef), coef, opt);
     end
 
-    [coef, hess, flag] = minimize(@(coef)loss_multi(X, y, consumer_idx, penalty, coef), coef);
+    [coef,~,flag,~,~,hess] = fminunc(@(coef)loss_multi(X, y, consumer_idx, penalty, coef), coef, opt);
 
 end
 
-if min(eig(hess)) <= 0
-    flag = 0;
-end
+pass = flag > 0 && min(eig(hess)) > 1e-9;
 
-V = hess^-1/n;
-se = sqrt(diag(V))';
+% sens = - 2*[0, coef(2:end)]/hess;
+
+% V = hess^-1/n;
+% se = sqrt(diag(V))';
 
 end
 
@@ -93,6 +99,7 @@ if nargout > 1
     Q = X./s;
     grad = (1/n)*( - sum(X(y,:)) + sum(Q)) + 2*w.*coef;
     hess = (1/n)*((X - Q)'*Q) + 2*diag(w);
+    hess = (hess + hess')/2;
 end
 end
 
@@ -117,51 +124,52 @@ if nargout > 1
     H = sparse(idx, 1:numel(idx), 1)*Q;
     % H = accumatrix(idx, Q);
     hess = (1/n)*( X'*Q - H'*H) + 2*diag(w);
+    hess = (hess + hess')/2;
 end
 end
 
-%% sub-function: quadratic optimization
-
-function [para, hess, flag] = minimize(func, para) 
-
-max_iter = 100;
-tol_step = 1e-6;
-tol_func = 1e-6;
-
-tau = 1e-5;
-min_tau = 1e-6;
-
-flag = 0;
-
-for iter = 1:max_iter
-
-    [val, grad, hess] = func(para);
-    [val, grad, hess] = deal(double(val), double(grad), double(hess));
-
-    % disp([val, tau, para])
-
-    if ~ allfinite([val, grad, hess(:)'])
-        return
-    end
-
-    while true
-        
-        step = - grad/(hess + tau*eye(height(hess)));
-        drop = val - func(para + step);
-
-        if max(abs(step)) < tol_step
-            flag = 1;
-            return
-        elseif drop > tol_func
-            para = para + step;
-            tau = max(tau/10, min_tau);
-            break
-        else
-            tau = tau*10;
-        end
-
-    end
-
-end
-
-end
+% %% sub-function: quadratic optimization
+% 
+% function [para, hess, flag] = minimize(func, para) 
+% 
+% max_iter = 100;
+% tol_step = 1e-7;
+% tol_func = 1e-7;
+% 
+% tau = 1e-5;
+% min_tau = 1e-7;
+% 
+% flag = 0;
+% 
+% for iter = 1:max_iter
+% 
+%     [val, grad, hess] = func(para);
+%     % [val, grad, hess] = deal(double(val), double(grad), double(hess));
+% 
+%     % disp([val, tau, para])
+% 
+%     if ~ allfinite([val, grad, hess(:)'])
+%         return
+%     end
+% 
+%     while true 
+% 
+%         step = - grad/(hess + tau*eye(height(hess)));
+%         drop = val - func(para + step);
+% 
+%         if max(abs(step)) < tol_step
+%             flag = 1;
+%             return
+%         elseif drop > tol_func
+%             para = para + step;
+%             tau = max(tau/10, min_tau);
+%             break
+%         else
+%             tau = tau*10;
+%         end
+% 
+%     end
+% 
+% end
+% 
+% end

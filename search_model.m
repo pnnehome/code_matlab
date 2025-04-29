@@ -1,8 +1,6 @@
 
 function Y = search_model(par, curve, Xp, Xa, Xc, consumer_idx)
 
-numType = class(Xp);
-
 p = width(Xp);
 a = width(Xa);
 c = width(Xc);
@@ -24,9 +22,9 @@ beta   = par(a+c+3   : a+c+p+2 );
 delta  = 0;
 % delta  = par(a+c+p+3);
 
-o = eta0 + Xc*eta' + randn(n, 1, numType);
-v = Xp*beta' - o(consumer_idx) + randn(n*J, 1, numType)*exp(delta);
-u = v + randn(n*J, 1, numType);
+o = eta0 + Xc*eta' + randn(n, 1);
+v = Xp*beta' - o(consumer_idx) + randn(n*J, 1)*exp(delta);
+u = v + randn(n*J, 1);
 
 r = v + interpolate(alpha0 + Xa*alpha', curve.log_cost, curve.utility);
 
@@ -35,7 +33,7 @@ r = v + interpolate(alpha0 + Xa*alpha', curve.log_cost, curve.utility);
 u = u(sort_idx);
 r = r(sort_idx);
 
-Y = nan(n*J, 2, numType);
+Y = nan(n*J, 2);
 
 for i = 1:n
     
@@ -56,7 +54,7 @@ for i = 1:n
     Y(k,1) = searched;
     Y(k,2) = bought;
     % Y(k,3) = max(0, sum(searched)-(0:J-1));
-    % Y(k,3) = searched.*(1:J)' + (1-searched)*(J+1);
+    % Y(k,3) = searched.*(1:J)' + (1-searched)*(sum(searched) + 1);
     
 end
 

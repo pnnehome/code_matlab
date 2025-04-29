@@ -2,15 +2,17 @@
 function [pass, buy_rate, srh_rate, num_srh, buy_n, srh_n] = data_checks(Y, Xp, Xa, Xc, consumer_idx)
 
 n = consumer_idx(end);
-J = numel(consumer_idx)/n;
+count = sparse(consumer_idx, 1, 1);
+J = full(count(1));
 
-if range(groupcounts(consumer_idx)) > 0; error('- current version requires the number of options to be constant across consumers.'); end
+if any( count == 0); error('- consumer_idx should have consecutive numbers.'); end
+if range(count) > 0; error('- current version requires the number of options to be constant across consumers.'); end
 if ~ isequal(consumer_idx, repelem((1:n)', J)); error('- consumer_idx is not correct.'); end
 
 if isempty(Xa); Xa = zeros(n*J, 0); end
 if isempty(Xc); Xc = zeros(n, 0); end
 
-if width(Y) < 2; error('- number of columns of Y should be 2.'); end
+if width(Y) ~= 2; error('- number of columns of Y should be 2.'); end
 if height(Y) ~= n*J; error('- number of rows in Y should equal the length of consumer_idx'); end
 if ~ isequal(Y, logical(Y)); error('- Y must be binary.'); end
 
@@ -20,6 +22,9 @@ if height(Xc) ~= n;   error('- number of rows in Xc should equal the number of c
 
 if ~ ( allfinite(Xp) && allfinite(Xa) && allfinite(Xc)); error(' - X has missing or non-finite values.'); end
 if any( [range(Xp), range(Xa), range(Xc)] == 0); error(' - X has attributes without variations.'); end
+
+% if any( abs([mean(Xp), mean(Xa), mean(Xc)]) > 1e-5); error(' - X is not de-meaned.'); end              % Apr-7
+% if any( abs([std(Xp), std(Xa), std(Xc)] - 1) > 1e-5); error(' - X is not standardized.'); end              % Apr-7
 
 ys = Y(:,1);
 yb = Y(:,2);
@@ -37,9 +42,9 @@ num_srh = mean(ys_t);
 buy_n = buy_rate*n;
 srh_n = srh_rate*n;
 
-pass = buy_n    > 20  && ... 
+pass = buy_n    > 25  && ... 
        buy_rate > 0.005 && ... 
        buy_rate < 0.99  && ...
-       srh_n    > 50  && ...
-       srh_rate > 0.01  && ...
+       srh_n    > 25  && ...
+       srh_rate > 0.005  && ...
        num_srh  < J-1;

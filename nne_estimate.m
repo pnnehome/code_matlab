@@ -6,23 +6,22 @@ addParameter(opt, 'se', false);
 addParameter(opt, 'se_repeats', 50)
 addParameter(opt, 'checks', true);
 parse(opt, varargin{:});
+opt = opt.Results;              % Apr-7
 
 n = consumer_idx(end);
 J = numel(consumer_idx)/n;
 
 if isempty(Xa); Xa = zeros(n*J,0); end
 if isempty(Xc); Xc = zeros(n,0); end
+if width(Y) > 2; Y = Y(:,1:2); end
 
-Xp = cast(Xp, nne.numType);
-Xa = cast(Xa, nne.numType);
-Xc = cast(Xc, nne.numType);
-Y  = cast(Y,  nne.numType);
+[Y, Xp, Xa, Xc] = deal(double(Y), double(Xp), double(Xa), double(Xc));              % Apr-7
 
 %% pre-estimation checks
 
 warning('off', 'backtrace')
 
-if opt.Results.checks
+if opt.checks
 
     [~, buy_rate, srh_rate, num_srh, buy_n, srh_n] = data_checks(Y, Xp, Xa, Xc, consumer_idx);
 
@@ -41,31 +40,48 @@ if opt.Results.checks
     if srh_n < nne.stat.srh_n(1); warning("- very few consumers non-free searches."); end
  
     if buy_rate < nne.stat.buy_rate(1); warning("- buy rate is too small."); end
-    if buy_rate > nne.stat.buy_rate(2); warning("- buy rate is too large."); end
+    if buy_rate > nne.stat.buy_rate(3); warning("- buy rate is too large."); end
     
     if srh_rate < nne.stat.srh_rate(1); warning("- search rate (non-free) is too small."); end
-    if srh_rate > nne.stat.srh_rate(2); warning("- search rate (non-free) is too large."); end
+    if srh_rate > nne.stat.srh_rate(3); warning("- search rate (non-free) is too large."); end
     
     if num_srh < nne.stat.num_srh(1); warning("- avg number of searches is too small."); end
-    if num_srh > nne.stat.num_srh(2); warning("- avg number of searches is too large."); end
+    if num_srh > nne.stat.num_srh(3); warning("- avg number of searches is too large."); end
 
-    [Zp, Za, Zc] = deal(zscore(Xp), zscore(Xa), zscore(Xc));
-    Z = [Zp, Za, Zc(consumer_idx,:)];
+    % X = [Xp, Xa, Xc(consumer_idx,:)];              % Apr-7
 
-    q = prctile(Z, [2.5, 50, 97.5]');
+    if any( abs([mean(Xp), mean(Xa), mean(Xc)]) > 1e-5); warning(' - we recommend de-meaning X.'); end              % Apr-7
 
-    if any( max(Z) > 2*q(3,:)-q(2,:) | min(Z) < 2*q(1,:)-q(2,:)); warning('- X has extreme values; winsorizing may help.'); end
-    if any( abs(skewness(Z)) > 2 & abs(mode(round(Z,1))) > 0.5); warning('- X has highly skewed attributes.'); end
+    bounds = @(T)[0, -1, 2; -2, 1, 0]*prctile(T, [2.5, 50, 97.5]');              % Apr-7
 
-    A = sparse(consumer_idx, 1:n*J, 1);
-    Zp_t = A*Zp/J;
-    Za_t = A*Za/J;
+    if any( [max(Xp);-min(Xp)] > bounds(Xp), 'all'); warning('- Xp has extreme values; winsorizing may help.'); end              % Apr-7
+    if any( [max(Xa);-min(Xa)] > bounds(Xa), 'all'); warning('- Xa has extreme values; winsorizing may help.'); end              % Apr-7
+    if any( [max(Xc);-min(Xc)] > bounds(Xc), 'all'); warning('- Xc has extreme values; winsorizing may help.'); end              % Apr-7
+    % if any( max(X) > 2*q(3,:)-q(2,:) | min(X) < 2*q(1,:)-q(2,:)); warning('- X has extreme values; winsorizing may help.'); end
 
-    if any( std(Zp - Zp_t(consumer_idx,:)) < 0.01); warning('- Xp lacks variation within consumers.'); end
-    if any( std(Za - Za_t(consumer_idx,:)) < 0.01); warning('- Xa lacks variation within consumers.'); end
-    if any( std(Za - Zp/(Zp'*Zp)*(Zp'*Za)) < 0.01); warning('- Xa lacks variation independent of Xp.'); end
+    Zp = zscore(Xp);              % Apr-7
+    Za = zscore(Xa);              % Apr-7
+
+    A = sparse(consumer_idx, 1:n*J, 1);              % Apr-7
+    Zp_t = A*Zp/J;              % Apr-7
+    Za_t = A*Za/J;              % Apr-7
+
+    if any( std(Zp - Zp_t(consumer_idx,:)) < 0.01); warning('- Xp lacks variation within consumers.'); end              % Apr-7
+    if any( std(Za - Za_t(consumer_idx,:)) < 0.01); warning('- Xa lacks variation within consumers.'); end              % Apr-7
+    if any( std(Za - Zp/(Zp'*Zp)*(Zp'*Za)) < 0.01); warning('- Xa lacks variation independent of Xp.'); end              % Apr-7
     
 end
+
+%% shuffle observations              % Apr-7
+
+seed = RandStream('twister', 'seed', 1);
+k = randperm(seed, n)';
+i = reshape((k'-1)*J + (1:J)', n*J, 1);
+
+Y = Y(i,:);
+Xp = Xp(i,:);
+Xa = Xa(i,:);
+Xc = Xc(k,:);
 
 %% estimation
 
@@ -73,8 +89,14 @@ par = Estimate(nne, Y, Xp, Xa, Xc, consumer_idx);
 
 %% post-estimation checks
 
-if opt.Results.checks 
-    if isfield(nne, 'tree') && mean(par.pred_diff) > nne.diff.q2; warning('- the data may be ill-suited for this search model.'); end
+if opt.checks
+
+    if     par.Properties.CustomProperties.mmt_sens > 1; warning('- reduced-form patterns are unstable; estimates are likely inaccurate.');
+    elseif par.Properties.CustomProperties.mmt_sens > 0.5; warning('- reduced-form patterns are not very stable; estimates may be inaccurate.'); end
+
+    if     par.Properties.CustomProperties.pred_diff > nne.diff.q2; warning('- the data is probably ill-suited for this search model.');
+    elseif par.Properties.CustomProperties.pred_diff > nne.diff.q1; warning('- the data might be ill-suited for this search model.'); end
+
 end
 
 warning('on', 'backtrace')
@@ -82,56 +104,53 @@ warning('on', 'backtrace')
 %% bootstrap SE
 
 par = par(:, 'val');
-if ~ opt.Results.se
-    return
-end
 
-vals = cell(1, opt.Results.se_repeats);
-idx_cabinet = arrayfun(@(i)(i-1)*J+1:i*J, 1:n, 'uni', false);
+if opt.se             % Apr-7
 
-parfor r = 1:opt.Results.se_repeats
+    vals = cell(1, opt.se_repeats);
 
-    seed = RandStream('threefry');
-    seed.Substream = r;
+    seed = RandStream('twister', 'seed', 2);              % Apr-7
+    draws = randi(seed, n, n, opt.se_repeats);              % Apr-7
 
-    k = randsample(seed, n, n, true);
-    i = cell2mat(idx_cabinet(k))';
+    parfor r = 1:opt.se_repeats
 
-    par_bt = Estimate(nne, Y(i,:), Xp(i,:), Xa(i,:), Xc(k,:), consumer_idx);
-    vals{r} = par_bt.val;
-end
+        k = draws(:, r);              % Apr-7
+        i = reshape((k'-1)*J + (1:J)', n*J, 1);              % Apr-7
 
-par.se = std(cell2mat(vals), [], 2);
+        par_bt = Estimate(nne, Y(i,:), Xp(i,:), Xa(i,:), Xc(k,:), consumer_idx);
+        vals{r} = par_bt.val;              % Apr-7
+    end
+
+    par.se = std(cell2mat(vals), [], 2);
 
 end
 
-%% ................................................................................................
-%% ................................................................................................
+end
+
+%% SUB-FUNCITONS ............................................................................
 
 %% Large data splitter
 
 function par = Estimate(nne, Y, Xp, Xa, Xc, consumer_idx)
 
 n = height(Xc);
+J = height(Xp)/n;
 
 if n <= nne.dim.n(2)
     par = Estimator(nne, Y, Xp, Xa, Xc, consumer_idx);
     return
 end
 
-blocks = ceil(n/nne.dim.n(2));
+blocks = ceil(n/nne.dim.n(2));              % Apr-7
+m = ceil(n/blocks);              % Apr-7
+pars = cell(blocks, 1);              % Apr-7
 
-seed = RandStream('twister');
-block_idx = ceil(randperm(seed, n)'/n*blocks);
+parfor b = 1:blocks              % Apr-7
 
-pars = cell(blocks, 2);
-
-parfor b = 1:blocks
-
-    k = find( block_idx == b);
+    k = (b-1)*m + 1 : min(b*m, n);              % Apr-7
     i = ismember(consumer_idx, k);
 
-    par = Estimator(nne, Y(i,:), Xp(i,:), Xa(i,:), Xc(k,:), grp2idx(consumer_idx(i)) );
+    par = Estimator(nne, Y(i,:), Xp(i,:), Xa(i,:), Xc(k,:), repelem(1:numel(k), J)' );
     pars{b} = par;
 end
 
@@ -146,18 +165,21 @@ end
 
 function par = Estimator(nne, Y, Xp, Xa, Xc, consumer_idx)
 
-[Zp, mu_p, sigma_p] = zscore(Xp);
-[Za, mu_a, sigma_a] = zscore(Xa);
-[Zc, mu_c, sigma_c] = zscore(Xc);
+[Zp, mu.p, sigma.p] = zscore(Xp);              % Apr-7
+[Za, mu.a, sigma.a] = zscore(Xa);              % Apr-7
+[Zc, mu.c, sigma.c] = zscore(Xc);              % Apr-7
 
-p = size(Xp, 2);
-a = size(Xa, 2);
-c = size(Xc, 2);
+p = width(Xp);
+a = width(Xa);
+c = width(Xc);
 
 i = matches(nne.name, nne.name_active(p, a, c));
 par = table('RowNames', nne.name(i));
+par = addprop(par, {'mmt_sens', 'pred_diff'}, {'t','t'});
 
-mmt = moments(Y, Zp, Za, Zc, consumer_idx, nne);
+[mmt, sens] = moments(Y, Zp, Za, Zc, consumer_idx, nne);
+
+par.Properties.CustomProperties.mmt_sens = sens;
 
 pred_net = predict(nne.net, mmt);
 par.pred_net  = pred_net(i)';
@@ -166,30 +188,38 @@ if isfield(nne, 'tree')
 
     pred_tree = arrayfun(@(k)predict(nne.tree{k}, mmt), 1:numel(nne.tree));
     par.pred_tree = pred_tree(i)';
-    par.pred_diff = nne.diff.w(i).*abs(pred_net(i)' - pred_tree(i)');
-
-    diff = mean(par.pred_diff);
-    w = (diff - nne.diff.q1)/(nne.diff.q2 - nne.diff.q1);
-
-    par.pred = par.pred_net + clip(w,0,1)*(par.pred_tree - par.pred_net);
+   
+    diff = mean(nne.diff.w(i).*abs(par.pred_net - par.pred_tree));
+    par.val = par.pred_net + (par.pred_tree - par.pred_net)*clip((diff - nne.diff.q1)/(nne.diff.q2 - nne.diff.q1), 0, 1);
 else
     
-    par.pred = par.pred_net;
+    diff = 0;
+    par.val = par.pred_net;
 end
 
-alpha0 = par.pred("\alpha_0");
-alpha  = par.pred("\alpha_" + (1:a));
-eta0   = par.pred("\eta_0");
-eta    = par.pred("\eta_" + (1:c));
-beta   = par.pred("\beta_" + (1:p));
+par.Properties.CustomProperties.pred_diff = diff;
 
-par.val = [
-           alpha0 - sum(alpha./sigma_a'.*mu_a')
-           alpha./sigma_a'
-           eta0   - sum(eta  ./sigma_c'.*mu_c') + sum(beta ./sigma_p'.*mu_p')
-           eta  ./sigma_c'
-           beta ./sigma_p'
-           ];
+par.val = rescale_estimate(par, mu, sigma);              % Apr-7
+
+end
+
+%% Re-scaling              % Apr-7
+
+function val = rescale_estimate(par, mu, sigma)
+
+alpha0 = par.val("\alpha_0");
+alpha  = par.val("\alpha_" + (1:numel(mu.a)));
+eta0   = par.val("\eta_0");
+eta    = par.val("\eta_" + (1:numel(mu.c)));
+beta   = par.val("\beta_" + (1:numel(mu.p)));
+
+val = [
+       alpha0 - sum(alpha./sigma.a'.*mu.a')
+       alpha./sigma.a'
+       eta0   - sum(eta  ./sigma.c'.*mu.c') + sum(beta ./sigma.p'.*mu.p')
+       eta  ./sigma.c'
+       beta ./sigma.p'
+       ];
 
 end
 
