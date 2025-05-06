@@ -1,7 +1,7 @@
 
 function X = winsorize(X)
 
-% This function winsorize data at 0.5 and 99.5 percentiles.
+% winsorize data at 0.5 and 99.5 percentiles.
 
 qs = prctile(X, [0.5, 99.5]');
 
