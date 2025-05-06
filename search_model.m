@@ -20,7 +20,6 @@ eta0   = par(a+2               );
 eta    = par(a+3     : a+c+2   );
 beta   = par(a+c+3   : a+c+p+2 );
 delta  = 0;
-% delta  = par(a+c+p+3);
 
 o = eta0 + Xc*eta' + randn(n, 1);
 v = Xp*beta' - o(consumer_idx) + randn(n*J, 1)*exp(delta);
@@ -53,8 +52,6 @@ for i = 1:n
     
     Y(k,1) = searched;
     Y(k,2) = bought;
-    % Y(k,3) = max(0, sum(searched)-(0:J-1));
-    % Y(k,3) = searched.*(1:J)' + (1-searched)*(sum(searched) + 1);
     
 end
 

@@ -23,9 +23,6 @@ if height(Xc) ~= n;   error('- number of rows in Xc should equal the number of c
 if ~ ( allfinite(Xp) && allfinite(Xa) && allfinite(Xc)); error(' - X has missing or non-finite values.'); end
 if any( [range(Xp), range(Xa), range(Xc)] == 0); error(' - X has attributes without variations.'); end
 
-% if any( abs([mean(Xp), mean(Xa), mean(Xc)]) > 1e-5); error(' - X is not de-meaned.'); end              % Apr-7
-% if any( abs([std(Xp), std(Xa), std(Xc)] - 1) > 1e-5); error(' - X is not standardized.'); end              % Apr-7
-
 ys = Y(:,1);
 yb = Y(:,2);
 

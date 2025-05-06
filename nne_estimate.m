@@ -6,7 +6,7 @@ addParameter(opt, 'se', false);
 addParameter(opt, 'se_repeats', 50)
 addParameter(opt, 'checks', true);
 parse(opt, varargin{:});
-opt = opt.Results;              % Apr-7
+opt = opt.Results;
 
 n = consumer_idx(end);
 J = numel(consumer_idx)/n;
@@ -15,7 +15,7 @@ if isempty(Xa); Xa = zeros(n*J,0); end
 if isempty(Xc); Xc = zeros(n,0); end
 if width(Y) > 2; Y = Y(:,1:2); end
 
-[Y, Xp, Xa, Xc] = deal(double(Y), double(Xp), double(Xa), double(Xc));              % Apr-7
+[Y, Xp, Xa, Xc] = deal(double(Y), double(Xp), double(Xa), double(Xc)); 
 
 %% pre-estimation checks
 
@@ -48,31 +48,26 @@ if opt.checks
     if num_srh < nne.stat.num_srh(1); warning("- avg number of searches is too small."); end
     if num_srh > nne.stat.num_srh(3); warning("- avg number of searches is too large."); end
 
-    % X = [Xp, Xa, Xc(consumer_idx,:)];              % Apr-7
+    bounds = @(T)[0, -1, 2; -2, 1, 0]*prctile(T, [2.5, 50, 97.5]');
 
-    if any( abs([mean(Xp), mean(Xa), mean(Xc)]) > 1e-5); warning(' - we recommend de-meaning X.'); end              % Apr-7
+    if any( [max(Xp);-min(Xp)] > bounds(Xp), 'all'); warning('- Xp has extreme values; winsorizing may help.'); end
+    if any( [max(Xa);-min(Xa)] > bounds(Xa), 'all'); warning('- Xa has extreme values; winsorizing may help.'); end
+    if any( [max(Xc);-min(Xc)] > bounds(Xc), 'all'); warning('- Xc has extreme values; winsorizing may help.'); end
 
-    bounds = @(T)[0, -1, 2; -2, 1, 0]*prctile(T, [2.5, 50, 97.5]');              % Apr-7
+    Zp = zscore(Xp);
+    Za = zscore(Xa);
 
-    if any( [max(Xp);-min(Xp)] > bounds(Xp), 'all'); warning('- Xp has extreme values; winsorizing may help.'); end              % Apr-7
-    if any( [max(Xa);-min(Xa)] > bounds(Xa), 'all'); warning('- Xa has extreme values; winsorizing may help.'); end              % Apr-7
-    if any( [max(Xc);-min(Xc)] > bounds(Xc), 'all'); warning('- Xc has extreme values; winsorizing may help.'); end              % Apr-7
-    % if any( max(X) > 2*q(3,:)-q(2,:) | min(X) < 2*q(1,:)-q(2,:)); warning('- X has extreme values; winsorizing may help.'); end
+    A = sparse(consumer_idx, 1:n*J, 1);
+    Zp_t = A*Zp/J;
+    Za_t = A*Za/J;
 
-    Zp = zscore(Xp);              % Apr-7
-    Za = zscore(Xa);              % Apr-7
-
-    A = sparse(consumer_idx, 1:n*J, 1);              % Apr-7
-    Zp_t = A*Zp/J;              % Apr-7
-    Za_t = A*Za/J;              % Apr-7
-
-    if any( std(Zp - Zp_t(consumer_idx,:)) < 0.01); warning('- Xp lacks variation within consumers.'); end              % Apr-7
-    if any( std(Za - Za_t(consumer_idx,:)) < 0.01); warning('- Xa lacks variation within consumers.'); end              % Apr-7
-    if any( std(Za - Zp/(Zp'*Zp)*(Zp'*Za)) < 0.01); warning('- Xa lacks variation independent of Xp.'); end              % Apr-7
+    if any( std(Zp - Zp_t(consumer_idx,:)) < 0.01); warning('- Xp lacks variation within consumers.'); end
+    if any( std(Za - Za_t(consumer_idx,:)) < 0.01); warning('- Xa lacks variation within consumers.'); end
+    if any( std(Za - Zp/(Zp'*Zp)*(Zp'*Za)) < 0.01); warning('- Xa lacks variation independent of Xp.'); end
     
 end
 
-%% shuffle observations              % Apr-7
+%% shuffle observations
 
 seed = RandStream('twister', 'seed', 1);
 k = randperm(seed, n)';
@@ -105,20 +100,20 @@ warning('on', 'backtrace')
 
 par = par(:, 'val');
 
-if opt.se             % Apr-7
+if opt.se
 
     vals = cell(1, opt.se_repeats);
 
-    seed = RandStream('twister', 'seed', 2);              % Apr-7
-    draws = randi(seed, n, n, opt.se_repeats);              % Apr-7
+    seed = RandStream('twister', 'seed', 2);
+    draws = randi(seed, n, n, opt.se_repeats);
 
     parfor r = 1:opt.se_repeats
 
-        k = draws(:, r);              % Apr-7
-        i = reshape((k'-1)*J + (1:J)', n*J, 1);              % Apr-7
+        k = draws(:, r);
+        i = reshape((k'-1)*J + (1:J)', n*J, 1);
 
         par_bt = Estimate(nne, Y(i,:), Xp(i,:), Xa(i,:), Xc(k,:), consumer_idx);
-        vals{r} = par_bt.val;              % Apr-7
+        vals{r} = par_bt.val;
     end
 
     par.se = std(cell2mat(vals), [], 2);
@@ -141,13 +136,13 @@ if n <= nne.dim.n(2)
     return
 end
 
-blocks = ceil(n/nne.dim.n(2));              % Apr-7
-m = ceil(n/blocks);              % Apr-7
-pars = cell(blocks, 1);              % Apr-7
+blocks = ceil(n/nne.dim.n(2));
+m = ceil(n/blocks);
+pars = cell(blocks, 1);
 
-parfor b = 1:blocks              % Apr-7
+parfor b = 1:blocks
 
-    k = (b-1)*m + 1 : min(b*m, n);              % Apr-7
+    k = (b-1)*m + 1 : min(b*m, n);
     i = ismember(consumer_idx, k);
 
     par = Estimator(nne, Y(i,:), Xp(i,:), Xa(i,:), Xc(k,:), repelem(1:numel(k), J)' );
@@ -165,9 +160,9 @@ end
 
 function par = Estimator(nne, Y, Xp, Xa, Xc, consumer_idx)
 
-[Zp, mu.p, sigma.p] = zscore(Xp);              % Apr-7
-[Za, mu.a, sigma.a] = zscore(Xa);              % Apr-7
-[Zc, mu.c, sigma.c] = zscore(Xc);              % Apr-7
+[Zp, mu.p, sigma.p] = zscore(Xp);
+[Za, mu.a, sigma.a] = zscore(Xa);
+[Zc, mu.c, sigma.c] = zscore(Xc);
 
 p = width(Xp);
 a = width(Xa);
@@ -199,11 +194,11 @@ end
 
 par.Properties.CustomProperties.pred_diff = diff;
 
-par.val = rescale_estimate(par, mu, sigma);              % Apr-7
+par.val = rescale_estimate(par, mu, sigma);
 
 end
 
-%% Re-scaling              % Apr-7
+%% Re-scaling
 
 function val = rescale_estimate(par, mu, sigma)
 

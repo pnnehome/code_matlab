@@ -3,8 +3,6 @@ function [mmt, sen] = moments(Y, Xp, Xa, Xc, consumer_idx, nne)
 
 %% input processing
 
-% consumer_idx = grp2idx(consumer_idx); 
-
 n = height(Xc);
 J = height(Xp)/n;
 
@@ -20,15 +18,13 @@ lamda = nne.reg_lamda;
 
 ys = logical(Y(:, 1));
 yb = logical(Y(:, 2));
-% yo = Y(:, 3);
 
 %%
 
 [mu1, mu2, mu3, mv1, mv2, mu3] = deal([]);
-[cf1, cf2, cf3, cf4, cf5, cf6, cf7, cf8] = deal([]);
-[ps1, ps2, ps3, ps4, ps5, ps6, ps7, ps8] = deal([]);
-[mm1, mm2, mm3, mm4, mm5, mm6, mm7, mm8] = deal([]);
-[ms1, ms2, ms3, ms4, ms5, ms6, ms7, ms8] = deal([]);
+[cf1, cf2, cf3, cf4, cf5] = deal([]);
+[ps1, ps2, ps3, ps4, ps5] = deal([]);
+[mm1, mm2, mm3, mm4, mm5] = deal([]);
 
 %% construct consumer level
 
@@ -44,17 +40,11 @@ Xp_s = Xp(ys,:);
 Xa_s = Xa(ys,:);
 Xc_s = A(:,ys)'*Xc;
 
-% X_s_en = [A'*log(ys_t), X_s];
-% X_b_en = [B'*log(ys_t), X_b];
-% X_t_en = [log(ys_t), X_t];
-
 %% some statistics
 
-% mu1 = [mean(ys_t>1), mean(ys_t), mean(log(ys_t)), mean(yb_t), mean(yb(is)), mean(B'*log(ys_t))];    
 mu1 = [mean(ys_t>1), mean(ys_t), mean(log(ys_t)), mean(yb_t), mean(yb(ys))];
 mu2([ip,ia,ic,true]) = [mean(Xp_s), mean(Xa_s), mean(Xc_s), nan];
 
-% mv1 = [std(ys_t), std(log(ys_t)), std(B'*log(ys_t))];
 mv1 = [std(ys_t), std(log(ys_t))];
 mv2([ip,ia,ic,true]) = [std(Xp_s), std(Xa_s), std(Xc_s), nan];
 mv3([ip,ia,   true]) = [std(Xp_t), std(Xa_t), nan];
@@ -68,11 +58,6 @@ X_o = [Xp,   Xa,   A'*Xc,  A'*Xp_t,  A'*Xa_t];
 X_s = [Xp_s, Xa_s, Xc_s];
 X_t = [            Xc,     Xp_t,     Xa_t];
 
-% [cf6, se6, fl6] = reg_logit( X_s_en, ys,       [], penalty);
-% [cf7, se7, fl7] = reg_logit( X_b_en, yb(is),   consumer_idx(is), penalty);
-% [cf8, se8, fl8] = reg_logit( X_t_en, yb_t,     [], penalty);
-
-% lamda = 1e-5;
 
 for k = 1:length(lamda)
     
@@ -98,19 +83,10 @@ end
 
 sen = max(abs(diff([mm1, mm2, mm3, mm4, mm5])));
 
-% if max(abs(sen)) > 1
-%     mmt = [];
-%     return
-% end
-
-%% packaging
-
-% whos mm1 mm2 mm3 mm4 mm5 mm6 mm7 mm8 mu1 mu2 mv1 mv2 ip ia ic J n
 
 %% outputs
 
-mmt = [mm1(:)', mm2(:)', mm3(:)', mm4(:)', mm5(:)', mm6(:)', mm7(:)', mm8(:)', ...
-       ms1(:)', ms2(:)', ms3(:)', ms4(:)', ms5(:)', ms6(:)', ms7(:)', ms8(:)', ... 
+mmt = [mm1(:)', mm2(:)', mm3(:)', mm4(:)', mm5(:)', ...
        mu1, mu2, mu3, mv1, mv2, mv3, ...
        ip, ia, ic, J, sqrt(n)];
 
