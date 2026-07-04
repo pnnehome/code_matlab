@@ -26,4 +26,4 @@ disp(result)
 
 <br><br>
 
-w/o readme: f763; w/o sample_data: fe81
+w/o readme: f763; w/o readme and sample_data: fe81
